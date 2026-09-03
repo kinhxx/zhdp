@@ -1,6 +1,6 @@
 <template>
   <main class="dashboard-view">
-    <header class="top-nav-shell">无人机低空指挥调度平台</header>
+    <TopNav />
     <section class="dashboard-grid">
       <aside class="dashboard-column dashboard-column--left">
         <DashboardPanel title="飞行总览" />
@@ -19,4 +19,5 @@
 
 <script setup lang="ts">
 import DashboardPanel from '@/components/layout/DashboardPanel.vue'
+import TopNav from '@/components/layout/TopNav.vue'
 </script>
