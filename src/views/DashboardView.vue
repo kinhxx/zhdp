@@ -11,7 +11,7 @@
         </DashboardPanel>
       </aside>
       <section class="dashboard-map-shell">
-        <div class="map-placeholder">中央地图</div>
+        <MapView />
       </section>
       <aside class="dashboard-column dashboard-column--right">
         <DashboardPanel title="飞行任务排行榜" />
@@ -26,4 +26,5 @@ import DashboardPanel from '@/components/layout/DashboardPanel.vue'
 import TopNav from '@/components/layout/TopNav.vue'
 import FlightOverview from '@/components/overview/FlightOverview.vue'
 import FlightTop10 from '@/components/records/FlightTop10.vue'
+import MapView from '@/components/map/MapView.vue'
 </script>
