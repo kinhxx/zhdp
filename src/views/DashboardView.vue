@@ -14,7 +14,9 @@
         <MapView />
       </section>
       <aside class="dashboard-column dashboard-column--right">
-        <DashboardPanel title="飞行任务排行榜" />
+        <DashboardPanel title="飞行任务排行榜">
+          <TaskRanking />
+        </DashboardPanel>
         <DashboardPanel title="飞行统计分析" grow />
       </aside>
     </section>
@@ -27,4 +29,5 @@ import TopNav from '@/components/layout/TopNav.vue'
 import FlightOverview from '@/components/overview/FlightOverview.vue'
 import FlightTop10 from '@/components/records/FlightTop10.vue'
 import MapView from '@/components/map/MapView.vue'
+import TaskRanking from '@/components/tasks/TaskRanking.vue'
 </script>
