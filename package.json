@@ -1,0 +1,29 @@
+{
+  "name": "fde-drone-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "serve": "vue-cli-service serve",
+    "build": "vue-cli-service build",
+    "test:unit": "vue-cli-service test:unit"
+  },
+  "dependencies": {
+    "@amap/amap-jsapi-loader": "^1.0.1",
+    "axios": "^1.7.0",
+    "core-js": "^3.37.0",
+    "echarts": "^5.5.0",
+    "vue": "^3.4.0",
+    "vue-router": "^4.4.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@vue/cli-plugin-babel": "~5.0.8",
+    "@vue/cli-plugin-typescript": "~5.0.8",
+    "@vue/cli-plugin-unit-jest": "~5.0.8",
+    "@vue/cli-service": "~5.0.8",
+    "@vue/compiler-sfc": "^3.4.0",
+    "sass": "^1.77.0",
+    "sass-loader": "^13.3.0",
+    "typescript": "~5.4.0"
+  }
+}

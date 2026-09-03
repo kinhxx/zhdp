@@ -1,0 +1,15 @@
+:root {
+  --bg-app: #07111d;
+  --bg-panel: rgba(10, 26, 42, 0.9);
+  --bg-panel-soft: rgba(13, 34, 55, 0.72);
+  --border-subtle: rgba(106, 161, 204, 0.2);
+  --text-primary: #eef7ff;
+  --text-secondary: #8fa8bd;
+  --accent: #49b7e8;
+  --accent-soft: rgba(73, 183, 232, 0.16);
+  --danger: #ff6b64;
+  --warning: #f6bd55;
+  --success: #53c79a;
+  --top-nav-height: clamp(64px, 5.1vw, 92px);
+  --panel-radius: 12px;
+}
