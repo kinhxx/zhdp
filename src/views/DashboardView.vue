@@ -17,7 +17,9 @@
         <DashboardPanel title="飞行任务排行榜">
           <TaskRanking />
         </DashboardPanel>
-        <DashboardPanel title="飞行统计分析" grow />
+        <DashboardPanel title="飞行统计分析" grow>
+          <FlightStatistics />
+        </DashboardPanel>
       </aside>
     </section>
   </main>
@@ -30,4 +32,5 @@ import FlightOverview from '@/components/overview/FlightOverview.vue'
 import FlightTop10 from '@/components/records/FlightTop10.vue'
 import MapView from '@/components/map/MapView.vue'
 import TaskRanking from '@/components/tasks/TaskRanking.vue'
+import FlightStatistics from '@/components/statistics/FlightStatistics.vue'
 </script>
