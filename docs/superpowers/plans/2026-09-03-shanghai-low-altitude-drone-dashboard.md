@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 基于 FDE 第二期工作坊需求和现有 5 个 Mock 接口，构建 Vue 3 大屏前端，实现登录、飞行总览、飞行案例 TOP10、飞行任务排行榜、飞行统计分析、中央地图底图切换及超宽屏自适应。
+**Goal:** 基于 FDE 第二期工作坊需求和现有 5 个 Mock 接口，构建 Vue 3 大屏前端，实现登录、飞行总览、飞行案例 TOP10、飞行任务排行榜、飞行统计分析、高德真实地图底图、上海实时天气及超宽屏自适应。
 
-**Architecture:** 使用 Vue 3 + Vue CLI 5.x 构建 `/login` 与 `/dashboard`。业务组件统一通过 `dashboardApi` 获取数据，Mock adapter 保持与接口字段一致；地图通过 `MapAdapter` 隔离地图 SDK。页面采用响应式 Grid，中央地图承担主要视觉空间。
+**Architecture:** 使用 Vue 3 + Vue CLI 5.x 构建 `/login` 与 `/dashboard`。业务组件统一通过 `dashboardApi` 获取 FDE 数据，Mock adapter 保持与接口字段一致；高德地图 JS API 2.0 通过统一加载器在线加载，`MapAdapter` 隔离地图 SDK；顶部天气通过高德 `AMap.Weather` 获取上海实况天气。页面采用响应式 Grid，中央地图承担主要视觉空间。
 
-**Tech Stack:** Node.js 18+、npm、Vue 3、Vue CLI 5.x、TypeScript、Vue Router 4、Sass、ECharts、Axios、@amap/amap-jsapi-loader、Jest。
+**Tech Stack:** Node.js 18+、npm、Vue 3、Vue CLI 5.x、TypeScript、Vue Router 4、Sass、ECharts、Axios、@amap/amap-jsapi-loader、Jest、高德地图 JavaScript API 2.0。
 
 **Spec:** `docs/superpowers/specs/2026-09-03-shanghai-low-altitude-drone-dashboard-design.md`
 
@@ -19,12 +19,16 @@
 - 业务字段严格依据当前接口 DTO，不自行改变字段业务含义。
 - 任务状态固定为“待派发 / 派发中 / 已接单 / 已结单”。
 - `shelterName` 页面名称固定为“方舱”。
-- 地图支持卫星图 / 电子地图 / 暗色主题，默认中心为上海。
+- 地图必须加载高德真实在线底图，支持卫星图 / 电子地图 / 暗色主题，默认中心为上海。
+- 高德 JS API Key、安全密钥或安全代理地址只能通过环境变量配置，不得硬编码进源码。
+- 本地开发允许使用 `securityJsCode`；生产部署优先使用 `serviceHost` 代理方式隐藏安全密钥。
+- 顶部天气必须调用高德 `AMap.Weather` 获取上海实时天气，不使用固定静态天气作为正常状态。
+- 天气每 10 分钟刷新一次；失败时保留最近一次成功数据并显示数据更新时间，首次请求失败则显示“天气暂不可用”。
 - 累计统计起始时间固定为 `2024-01-01`。
 - 支持 Chrome、Edge、Firefox、Safari、国产浏览器极速模式。
 - 支持 16:9 / 21:9 / 32:9 / 48:9，1920×1080 至 7680×1440。
 - 超宽屏新增宽度优先分配给中央地图，左右业务栏保持稳定阅读宽度。
-- 测试只覆盖时间范围转换、飞行记录排序等关键纯逻辑，并执行最终构建和人工验收。
+- 测试只覆盖时间范围转换、飞行记录排序等关键纯逻辑；第三方地图和天气 API 通过构建、错误降级和人工联调验收，不重复测试第三方 SDK 内部行为。
 
 ---
 
@@ -59,6 +63,7 @@
 │   │       ├── MapView.vue
 │   │       └── BaseLayerSwitch.vue
 │   ├── map/
+│   │   ├── loadAMap.ts
 │   │   ├── MapAdapter.ts
 │   │   └── AMapAdapter.ts
 │   ├── services/
@@ -199,7 +204,7 @@ Expected: build exit 0。
 
 ---
 
-### Task 2: 实现登录与顶部导航
+### Task 2: 实现登录、顶部导航与上海实时天气
 
 **Files:**
 - Create: `src/services/authService.ts`
@@ -208,10 +213,24 @@ Expected: build exit 0。
 - Modify: `src/views/LoginView.vue`
 - Modify: `src/views/DashboardView.vue`
 - Modify: `src/router/index.ts`
+- Consumes: `src/map/loadAMap.ts`（Task 5 提供；执行 Task 2 时天气 UI 可先按接口编写，Task 5 完成后联调真实天气）
 
 **Interfaces:**
 - Produces: `login(username, password, captcha): boolean`。
 - Produces: `isAuthenticated(): boolean`、`logout(): void`。
+- Produces: `getLiveWeather(city?: string): Promise<LiveWeather>`。
+
+```ts
+export interface LiveWeather {
+  city: string
+  weather: string
+  temperature: number
+  windDirection: string
+  windPower: string
+  humidity: string
+  reportTime: string
+}
+```
 
 - [ ] **Step 1: 实现本地登录态**
 
@@ -225,18 +244,65 @@ Expected: build exit 0。
 
 未登录访问 `/dashboard` 时转到 `/login`；退出后清除登录态并返回 `/login`。
 
-- [ ] **Step 4: 完成 TopNav**
+- [ ] **Step 4: 实现实时天气 Service**
 
-左侧：实时时间、星期、日期、天气；中间：系统标题；右侧：用户名、首页、头像、退出。
+`weatherService.ts` 不保存静态天气常量。通过 Task 5 的 `loadAMap()` 获取已加载的高德 JS API，然后加载 `AMap.Weather` 插件并查询上海市实况天气：
 
-时间每秒更新一次，组件卸载时清理 interval。
+```ts
+import { loadAMap } from '@/map/loadAMap'
 
-- [ ] **Step 5: 验证并提交**
+export async function getLiveWeather(city = '上海市'): Promise<LiveWeather> {
+  const AMap = await loadAMap(['AMap.Weather'])
+
+  return new Promise((resolve, reject) => {
+    const weather = new AMap.Weather()
+    weather.getLive(city, (error: unknown, data: any) => {
+      if (error || !data) {
+        reject(error ?? new Error('weather unavailable'))
+        return
+      }
+
+      resolve({
+        city: data.city,
+        weather: data.weather,
+        temperature: Number(data.temperature),
+        windDirection: data.windDirection,
+        windPower: String(data.windPower),
+        humidity: String(data.humidity),
+        reportTime: data.reportTime,
+      })
+    })
+  })
+}
+```
+
+天气展示字段固定为：天气现象、温度、风向、风力、湿度；`reportTime` 作为数据更新时间保留。
+
+- [ ] **Step 5: TopNav 接入实时天气刷新**
+
+TopNav：
+
+1. 页面加载后立即调用一次 `getLiveWeather('上海市')`。
+2. 每 `10 * 60 * 1000` ms 刷新一次。
+3. 请求成功后替换当前天气并更新 `reportTime`。
+4. 请求失败但已有成功数据时，保留最后一次成功结果，不清空为假数据。
+5. 首次请求失败时显示“天气暂不可用”。
+6. 组件卸载时清理天气刷新 timer 和时钟 timer。
+
+顶部左侧最终显示：实时时间、星期、日期、天气、温度、风向/风力、湿度。
+
+- [ ] **Step 6: 完成用户区**
+
+中间显示系统标题；右侧显示用户名、首页、头像、退出。
+
+- [ ] **Step 7: 验证并提交**
+
+Task 5 完成真实 AMap Loader 后执行联调：打开大屏确认上海天气不是源码中的固定值，并能读取 `reportTime`。
 
 ```bash
 npm run build
 git add src/services/authService.ts src/services/weatherService.ts src/components/layout/TopNav.vue src/views src/router/index.ts
-git commit -m "feat: add login and dashboard navigation"
+git commit -m "feat: add login navigation and live weather"
 ```
 
 ---
@@ -263,8 +329,6 @@ git commit -m "feat: add login and dashboard navigation"
 
 - [ ] **Step 1: 定义接口 DTO**
 
-飞行总览：
-
 ```ts
 export interface FlightOverviewDto {
   shelterNum: number
@@ -278,11 +342,7 @@ export interface FlightOverviewDto {
   durationHours: string
   routeId: number | null
 }
-```
 
-飞行记录：
-
-```ts
 export interface FlyRecordDto {
   flyRecordId: number
   flyRecordName: string
@@ -294,11 +354,7 @@ export interface FlyRecordDto {
   shelterId: number
   shelterName: string
 }
-```
 
-任务统计：
-
-```ts
 export interface TaskOverviewDto {
   deptId: number
   deptName: string
@@ -313,11 +369,7 @@ export interface TaskOverviewDto {
   completedPercent: number
   taskOverviewRespVoList: TaskOverviewDto[]
 }
-```
 
-飞行统计：
-
-```ts
 export interface FlightCountDto {
   deptId: number | null
   deptName: string | null
@@ -427,10 +479,11 @@ git commit -m "feat: add flight overview and recent records"
 
 ---
 
-### Task 5: 实现中央地图与底图切换
+### Task 5: 初始化高德真实地图、API Key 安全配置与底图切换
 
 **Files:**
 - Create: `.env.example`
+- Create: `src/map/loadAMap.ts`
 - Create: `src/map/MapAdapter.ts`
 - Create: `src/map/AMapAdapter.ts`
 - Create: `src/components/map/BaseLayerSwitch.vue`
@@ -451,7 +504,73 @@ export interface MapAdapter {
 }
 ```
 
-- [ ] **Step 1: 实现 AMapAdapter**
+`loadAMap.ts`：
+
+```ts
+export async function loadAMap(plugins: string[] = []): Promise<any>
+```
+
+- [ ] **Step 1: 明确高德 Key 类型和环境变量**
+
+高德控制台创建应用并申请“Web端(JS API)” Key。项目仓库只提交 `.env.example`：
+
+```text
+VUE_APP_AMAP_KEY=
+VUE_APP_AMAP_SECURITY_CODE=
+VUE_APP_AMAP_SERVICE_HOST=
+```
+
+实际 Key 写入开发者本地 `.env.local` 或部署环境变量，不提交真实 Key。
+
+配置规则：
+
+1. `VUE_APP_AMAP_KEY` 必填。
+2. 本地开发可设置 `VUE_APP_AMAP_SECURITY_CODE`。
+3. 生产环境优先设置 `VUE_APP_AMAP_SERVICE_HOST`，通过反向代理转发高德服务请求。
+4. `SERVICE_HOST` 存在时优先于 `SECURITY_CODE`。
+5. 两者均缺失时，地图和天气模块返回明确配置错误，不静默使用假数据。
+
+- [ ] **Step 2: 实现统一高德 JS API Loader**
+
+`loadAMap.ts` 在第一次加载前写入安全配置，并缓存 Promise，地图和天气共享同一个 AMap 实例，禁止重复加载 JS API：
+
+```ts
+import AMapLoader from '@amap/amap-jsapi-loader'
+
+let amapPromise: Promise<any> | null = null
+
+export function loadAMap(plugins: string[] = []) {
+  const key = process.env.VUE_APP_AMAP_KEY
+  const serviceHost = process.env.VUE_APP_AMAP_SERVICE_HOST
+  const securityCode = process.env.VUE_APP_AMAP_SECURITY_CODE
+
+  if (!key) {
+    return Promise.reject(new Error('VUE_APP_AMAP_KEY is not configured'))
+  }
+
+  if (serviceHost) {
+    ;(window as any)._AMapSecurityConfig = { serviceHost }
+  } else if (securityCode) {
+    ;(window as any)._AMapSecurityConfig = { securityJsCode: securityCode }
+  } else {
+    return Promise.reject(new Error('AMap security configuration is missing'))
+  }
+
+  if (!amapPromise) {
+    amapPromise = AMapLoader.load({
+      key,
+      version: '2.0',
+      plugins: ['AMap.Weather', ...plugins],
+    })
+  }
+
+  return amapPromise
+}
+```
+
+如果后续需要插件集合动态增加，不重新执行 Loader；首期固定预加载 `AMap.Weather` 即可。
+
+- [ ] **Step 3: 实现真实地图初始化**
 
 默认中心：
 
@@ -459,33 +578,62 @@ export interface MapAdapter {
 const SHANGHAI_CENTER: [number, number] = [121.4737, 31.2304]
 ```
 
-电子地图使用标准矢量底图；暗色模式切换暗色地图样式；卫星模式使用 `AMap.TileLayer.Satellite`。
+`AMapAdapter.mount()` 必须调用 `loadAMap()`，在容器进入 DOM 后创建真实 `AMap.Map`：
 
-- [ ] **Step 2: 配置环境变量**
-
-`.env.example`：
-
-```text
-VUE_APP_AMAP_KEY=
-VUE_APP_AMAP_SECURITY_CODE=
+```ts
+const AMap = await loadAMap()
+this.map = new AMap.Map(container, {
+  center: SHANGHAI_CENTER,
+  zoom: 10,
+  viewMode: '2D',
+  mapStyle: 'amap://styles/darkblue',
+})
 ```
 
-地图服务未配置时，地图区域显示“地图服务未配置”，其他业务模块正常渲染。
+地图加载失败只影响中央地图区域；左右统计模块继续渲染。
 
-- [ ] **Step 3: 完成底图切换控件**
+- [ ] **Step 4: 实现三种真实底图**
 
-按钮固定为：卫星、电子、暗色。切换只更新地图底图，不重建整页组件。
+- 电子地图：标准矢量图层。
+- 暗色地图：矢量底图 + 高德暗色 `mapStyle`。
+- 卫星地图：`AMap.TileLayer.Satellite`；必要时叠加道路注记层。
 
-- [ ] **Step 4: 处理 resize 和销毁**
+底图切换只调用 `MapAdapter.setBaseLayer()`，不重新创建 Vue 页面或整个地图实例。
+
+- [ ] **Step 5: 完成底图切换控件**
+
+按钮固定为：卫星、电子、暗色。当前选中状态必须清晰。
+
+- [ ] **Step 6: 处理 resize 和销毁**
 
 `MapView.vue` 创建单一 adapter 实例；容器变化时调用 `resize()`；组件卸载时调用 `destroy()`。
 
-- [ ] **Step 5: 验证并提交**
+- [ ] **Step 7: 地图与天气联合联调**
+
+使用真实环境变量启动：
+
+```bash
+npm run serve
+```
+
+人工验证：
+
+```text
+[ ] 页面网络请求加载的是高德在线 JS API/地图瓦片，不是本地静态地图图片
+[ ] 地图中心为上海
+[ ] 卫星/电子/暗色三种底图均可切换
+[ ] TopNav 能通过 AMap.Weather 得到上海实况天气
+[ ] 天气展示包含温度、天气、风向、风力、湿度
+[ ] 去掉 Key 后地图显示“地图服务未配置”或配置错误，其他模块正常
+[ ] 天气 API 失败时不生成随机/固定天气值
+```
+
+- [ ] **Step 8: 验证并提交**
 
 ```bash
 npm run build
-git add .env.example src/map src/components/map src/views/DashboardView.vue
-git commit -m "feat: add dashboard map base layers"
+git add .env.example src/map src/components/map src/services/weatherService.ts src/components/layout/TopNav.vue src/views/DashboardView.vue
+git commit -m "feat: add live AMap and Shanghai weather"
 ```
 
 ---
@@ -575,7 +723,7 @@ git commit -m "feat: add organization flight statistics"
 
 - [ ] **Step 1: 完成信息层级**
 
-最终首屏只包含：顶部导航、飞行总览、飞行案例 TOP10、中央地图、飞行任务排行榜、飞行统计分析。
+最终首屏只包含：顶部导航、飞行总览、飞行案例 TOP10、中央真实地图、飞行任务排行榜、飞行统计分析。
 
 - [ ] **Step 2: 验证 1920×1080**
 
@@ -584,6 +732,7 @@ git commit -m "feat: add organization flight statistics"
 ```text
 无 body 滚动条
 标题完整
+实时天气完整可读
 左右业务栏完整
 地图为最大单一区域
 TOP10 只在自身面板内部滚动
@@ -601,21 +750,26 @@ TOP10 只在自身面板内部滚动
 7680×1440
 ```
 
-要求：左右栏保持 `clamp()` 宽度，中央地图吸收主要新增宽度，无整体拉伸和裁切。
+要求：左右栏保持 `clamp()` 宽度，中央地图吸收主要新增宽度，无整体拉伸和裁切；地图和 ECharts 均在尺寸变化后调用自身 `resize()`。
 
 - [ ] **Step 4: 执行功能验收**
 
 ```text
 [ ] 登录页包含用户名、密码、验证码
 [ ] 登录成功进入大屏，退出返回登录页
+[ ] 顶部天气来自高德实时天气，不是硬编码静态天气
+[ ] 天气展示天气现象、温度、风向、风力、湿度
+[ ] 天气失败时有明确降级，不生成假实时数据
 [ ] 飞行总览正确展示 9 项统计数据
 [ ] 飞行案例 TOP10 按 createTime 倒序，使用卡片展示
 [ ] 任务排行支持 今日/本周/本月/本年/累计
 [ ] 任务状态支持 待派发/派发中/已接单/已结单
 [ ] 组织任务数量和占比随状态切换
 [ ] 飞行统计支持 架次/里程/时长
+[ ] 地图使用高德真实在线地图数据
 [ ] 地图支持 卫星/电子/暗色
 [ ] 地图默认上海
+[ ] Key / 安全配置缺失时地图独立降级，不影响其他业务模块
 [ ] 1920×1080 至 7680×1440 布局无全局裁切和拉伸
 ```
 
@@ -631,7 +785,7 @@ Expected: all pass。
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src
+git add src .env.example
 git commit -m "feat: complete drone command dashboard"
 ```
 
@@ -642,7 +796,10 @@ git commit -m "feat: complete drone command dashboard"
 | Design requirement | Implementation task |
 |---|---|
 | 登录、退出、验证码 | Task 2 |
-| 顶部时间/日期/天气/用户区域 | Task 2 |
+| 顶部时间/日期/用户区域 | Task 2 |
+| 上海实时天气 | Task 2, Task 5 |
+| 高德 JS API Key / 安全配置 | Task 5 |
+| 高德真实在线地图初始化 | Task 5 |
 | 顶部 + 左/中/右三栏 | Task 1 |
 | 飞行总览 9 项统计 | Task 3, Task 4 |
 | 飞行案例 TOP10 | Task 3, Task 4 |
@@ -660,6 +817,9 @@ git commit -m "feat: complete drone command dashboard"
 ## Self-Review
 
 - 所有首屏业务字段均映射到当前接口字段。
+- 天气明确使用高德实时天气服务，不再保留静态天气作为正常实现。
+- 地图明确使用高德 JS API 2.0 在线底图，并包含 Key / 安全密钥 / `serviceHost` 配置步骤。
+- 地图和天气共享同一个高德 Loader，避免重复加载和重复配置。
 - 技术栈、目录、任务和命令保持一致。
 - 计划中无 `TBD`、`TODO` 或未定义实现步骤。
-- 测试范围限制在关键业务纯逻辑和最终构建验收。
+- 测试范围限制在关键业务纯逻辑和最终构建/联调验收。
